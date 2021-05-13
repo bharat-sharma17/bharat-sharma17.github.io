@@ -1,0 +1,141 @@
+
+----Q1-List all the states in which we have customers who have bought cellphones from 2005 till today.
+
+Select distinct  State from FACT_TRANSACTIONS A 
+inner join DIM_LOCATION B on A.IDLocation=B.IDLocation 
+where year(date)>=2005
+
+----Q2-What state in the US is buying more 'Samsung' cell phones?
+SELECT TOP 1 
+State,COUNT(STATE) AS NO_OF_ORDERS_PLACED
+FROM FACT_TRANSACTIONS B1
+INNER JOIN DIM_MODEL B2 ON B2.IDModel=B1.IDModel 
+INNER JOIN DIM_MANUFACTURER B3 ON B3.IDManufacturer=B2.IDManufacturer
+INNER JOIN DIM_LOCATION B4 ON B4.IDLocation=B1.IDLocation
+WHERE B4.Country= 'US' AND B3.Manufacturer_Name='SAMSUNG'
+GROUP BY STATE 
+ORDER BY 2 DESC 
+
+----Q3-Show the number of transactions for each model per zip code per state.
+SELECT Manufacturer_Name,Model_Name,ZipCode,State,COUNT(*) AS NO_OF_TRANSACTIONS
+FROM DIM_MODEL C1
+LEFT JOIN FACT_TRANSACTIONS  C2  ON  C1.IDModel=C2.IDModel
+INNER JOIN DIM_LOCATION C3 ON C3.IDLocation =C2.IDLocation
+INNER JOIN DIM_MANUFACTURER C4 ON C4.IDManufacturer=C1.IDManufacturer
+GROUP BY Manufacturer_Name,Model_Name,ZipCode,State
+
+----Q4-Show the cheapest cellphone.
+SELECT Manufacturer_Name,Model_Name,UNIT_PRICE FROM DIM_MODEL  D1
+INNER JOIN DIM_MANUFACTURER D2 ON D1.IDManufacturer=D2.IDManufacturer
+WHERE UNIT_PRICE = (SELECT MIN(Unit_price) FROM DIM_MODEL)
+
+----Q5-Find out the average price for each model in the top 5 manufactures in terms of sales quantity and order by average price.
+SELECT Manufacturer_Name,Model_Name,CAST(AVG(TotalPrice/Quantity) AS NUMERIC(10,2)) AS AVG_SELLING_PRICE
+FROM FACT_TRANSACTIONS FT
+INNER JOIN DIM_MODEL DM  ON DM.IDModel=FT.IDModel
+INNER JOIN DIM_MANUFACTURER MR ON MR.IDManufacturer=DM.IDManufacturer
+WHERE Manufacturer_Name 
+IN (
+SELECT TOP 5
+Manufacturer_Name
+FROM FACT_TRANSACTIONS FT
+INNER JOIN DIM_MODEL DM  ON DM.IDModel=FT.IDModel
+INNER JOIN DIM_MANUFACTURER MR ON MR.IDManufacturer=DM.IDManufacturer
+GROUP BY MANUFACTURER_NAME
+ORDER BY SUM(Quantity) DESC
+)
+GROUP BY  Manufacturer_Name,Model_Name
+----Q6-List the names of the customers and the average amount spent in 2009,where the average is higher than 500.
+SELECT Customer_Name,avg(TotalPrice) as Average_Spent
+ FROM FACT_TRANSACTIONS 
+inner join DIM_CUSTOMER on DIM_CUSTOMER.IDCustomer=FACT_TRANSACTIONS.IDCustomer
+WHERE YEAR(DATE) = 2009
+group by Customer_Name
+having avg(totalprice) >500
+
+----Q7-List if there is any model that was in the top 5 in terms of quantity,simultaneously in 2008 ,2009 and 2010.
+select T1.Manufacturer_Name,T1.Model_Name  from (
+--table 1(2008)
+(SELECT TOP 5
+Manufacturer_Name,Model_Name,SUM(Quantity) AS QUNTITY_SOLD_8
+FROM DIM_MODEL A11
+INNER JOIN DIM_MANUFACTURER A12 ON A11.IDManufacturer=A12.IDManufacturer
+INNER JOIN FACT_TRANSACTIONS A13 ON A13.IDModel=A11.IDModel
+WHERE YEAR(DATE) = 2008
+GROUP BY 	Manufacturer_Name,Model_Name
+ORDER BY SUM(Quantity) DESC) T1
+--table 2(2009)
+inner join 
+(SELECT TOP 5
+Manufacturer_Name,Model_Name,SUM(Quantity) as QUNTITY_SOLD_9
+FROM DIM_MODEL A11
+INNER JOIN DIM_MANUFACTURER A12 ON A11.IDManufacturer=A12.IDManufacturer
+INNER JOIN FACT_TRANSACTIONS A13 ON A13.IDModel=A11.IDModel
+WHERE YEAR(DATE) = 2009
+GROUP BY 	Manufacturer_Name,Model_Name
+ORDER BY SUM(Quantity) DESC
+) T2  on T1.Model_Name=T2.Model_Name 
+--table 3(2010)
+inner join
+(SELECT TOP 5
+Manufacturer_Name,Model_Name,SUM(Quantity) as Qunatity_sold_10
+FROM DIM_MODEL A11
+INNER JOIN DIM_MANUFACTURER A12 ON A11.IDManufacturer=A12.IDManufacturer
+INNER JOIN FACT_TRANSACTIONS A13 ON A13.IDModel=A11.IDModel
+WHERE YEAR(DATE) = 2010
+GROUP BY Manufacturer_Name,Model_Name
+ORDER BY SUM(Quantity) DESC
+) T3    on T3.Model_Name=T2.Model_Name and  T3.Model_Name=T1.Model_Name )   
+
+----Q8-Show the manufacturer with the 2nd top sales in the year of 2009 and the manufacturer with 2nd top sales in the yaer of 2010.
+SELECT YEAR(DATE) AS YEAR, Manufacturer_Name FROM (
+SELECT IDCustomer,IDLocation,Date,TotalPrice,Quantity,Model_Name,Unit_price,Manufacturer_Name
+,ROW_NUMBER() OVER (PARTITION BY YEAR(DATE) ORDER BY TOTALPRICE DESC) AS LIST_RANK
+FROM FACT_TRANSACTIONS FT
+INNER JOIN DIM_MODEL DM ON FT.IDModel=DM.IDModel
+INNER JOIN DIM_MANUFACTURER DMR ON DMR.IDManufacturer=DM.IDManufacturer
+)TABLE1
+WHERE LIST_RANK=2 AND YEAR(DATE) IN (2009,2010)
+
+----Q9-Show the manufactures that sold cellphone in 2010 but didn't in 2009.
+SELECT*FROM (
+SELECT
+Manufacturer_Name
+FROM FACT_TRANSACTIONS TBL1
+INNER JOIN DIM_MODEL TBL2 ON TBL1.IDModel=TBL2.IDModel 
+INNER JOIN DIM_MANUFACTURER TBL3 ON TBL2.IDManufacturer=TBL3.IDManufacturer
+WHERE YEAR(DATE) = 2010
+GROUP BY Manufacturer_Name
+EXCEPT 
+SELECT
+Manufacturer_Name
+FROM FACT_TRANSACTIONS TBL1
+INNER JOIN DIM_MODEL TBL2 ON TBL1.IDModel=TBL2.IDModel 
+INNER JOIN DIM_MANUFACTURER TBL3 ON TBL2.IDManufacturer=TBL3.IDManufacturer
+WHERE YEAR(DATE) = 2009
+GROUP BY Manufacturer_Name ) TBL4
+
+/***Q10-Find top 10 customers and their average spend , average quantity by each year , 
+Also find the percentage of change in their spend.**/
+select top 10 * from 
+(select cus,[2003] as sum_yr3 ,[2004] as sum_y4,[2005] as sum_y5,[2006] as sum_y6,[2007] as sum_y7,[2008] as sum_y8,[2009] as sum_y9,[2010] as sum_y10 from 
+(select a.IDCustomer as cus,year(date) yr , totalprice from DIM_CUSTOMER a inner join FACT_TRANSACTIONS b on a.IDCustomer=b.IDCustomer) as tt
+pivot( 
+		sum(totalprice) 
+		for yr
+		in ([2003],[2004],[2005],[2006],[2007],[2008],[2009],[2010])
+		)  as tt2)tty1
+		inner join 
+(select cus,[2003] as avg_y3 ,[2004] as avg_y4,[2005] as avg_y5,[2006] as avg_y6,[2007] as avg_y7,[2008] as avg_y8,[2009] as avg_y9,[2010] as avg_y10 from 
+(select a.IDCustomer as cus,year(date) yr , totalprice from DIM_CUSTOMER a inner join FACT_TRANSACTIONS b on a.IDCustomer=b.IDCustomer) as tt
+pivot( 
+		avg(totalprice) 
+		for yr
+		in ([2003],[2004],[2005],[2006],[2007],[2008],[2009],[2010])
+		)  as tt		)tty2 on tty2.cus=tty1.cus
+		inner join 
+		(select idcustomer,sum(totalprice) as total from FACT_TRANSACTIONS group by IDCustomer) as tty3
+		on tty3.IDCustomer=tty1.cus
+order by total desc
+
+

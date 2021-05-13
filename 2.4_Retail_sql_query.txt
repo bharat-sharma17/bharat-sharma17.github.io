@@ -1,0 +1,135 @@
+
+select top 10 *  from customer
+select top 10* from transactions 
+select top 10 * from prod_cat_info
+
+--------********************************************************************
+----Total number of rows in each table of database ?
+select (select count(*) from customer)      as Total_rows_in_customer
+select (select count(*) from transactions)  as Total_rows_in_transactions
+select (select count(*) from prod_cat_info) as Total_rows_in_prod_cat_info
+
+----Q2-What is the total number transactions that have a return?
+select (select count(*) from transactions where sign(Qty)=-1 )  as [Returns]
+
+/*Q3-What is the time range of the transaction data available for analysis? Show te output in number of days,
+months  and years simultnaeously in different coulumns ?*/
+ select DATEDIFF(YEAR,min(dob),max(dob)) as [In Years],
+		DATEDIFF(month,min(dob),max(dob)) as [In months],
+		DATEDIFF(day,min(dob),max(dob)) as [In days]
+		from Customer
+--*********************************************************************************
+----Data Analysis----------------------------------
+
+----Q1-Which channel is most frequently used for transaction?
+select Store_type ,Frequency from(
+select store_type , count(store_type) as frequency
+, row_number() over (order by count(store_type) desc) as rank_counting
+from transactions 
+group by store_type 
+) tb2
+where rank_counting = 1
+
+----Q2-What is the count of male and female customers in the databse ?
+select  Gender , count(gender) as Frequency_Of_Gender
+from customer
+group by gender 
+having count(gender) <> 0 
+
+----Q3-From which city do we have the maximum number of customers and how many?
+select top 1  city_code as city_with_city_code , count(city_code) as Number_of_customers
+from customer
+group by city_code 
+order by count(city_code)  desc
+
+----Q4-How many sub-categories are there under the books category?
+select prod_cat as Category ,count(prod_cat) as Sub_categories
+from prod_cat_info
+group by prod_cat
+having prod_cat= 'books'
+
+----Q5-What is the maximum quantity of products ever ordered?
+select MAX(cast(Qty as numeric)) from Transactions
+where sign(cast(Qty as numeric))=1
+
+----Q6-What is the net total revenue generated in categories Electronics and books? 
+select prod_cat,sum(total_amt) as [Revenue Generated]from Transactions A 
+inner join prod_cat_info B on A.prod_cat_code=B.prod_cat_code and A.prod_subcat_code=B.prod_sub_cat_code
+where sign(total_amt)=1 and prod_cat in('Electronics','Books')
+group by prod_cat
+
+----Q7-How many customers have > 10 transactions with us , excluding reuturns?
+Select count(*) as [Total_Cust]from 
+(select cust_id,COUNT(cust_id) as Freq from Transactions
+where sign(cast(qty as numeric))=1
+group by cust_id
+having count(cust_id) >10
+) as T1
+
+----Q8-What is the combined revenue earned from the "electronics' and 'clothing' categories from 'flasgship stores'?
+select sum(total_amt) as Total_Revenue
+from Transactions A
+inner join prod_cat_info B
+on A.prod_cat_code=B.prod_cat_code and A.prod_subcat_code=B.prod_sub_cat_code
+where prod_cat in ('Electronics','Clothing') and Store_type like 'flagship%' and sign(qty)=1
+
+----Q9-What is the total revenue generated form 'male' customers in 'electronics' category?
+----Output should display total revenue by prod sub-cat?
+select prod_subcat , sum(cast(total_amt as numeric )) as Revenue_Generated
+from customer c
+inner join transactions t on customer_id=cust_id
+inner join prod_cat_info  p on t.prod_cat_code=p.prod_cat_code and t.prod_subcat_code=p.prod_sub_cat_code
+where prod_cat= 'electronics' and Gender ='m' and sign(cast(total_amt as numeric )) = 1
+group by prod_subcat
+go
+
+---Q10-What is percentage of sales and returns by product sub category ; 
+---display only top 5 sub categories in terms of sales?
+select  prod_subcat,
+100*(sum(case 
+when total_amt>=0 then total_amt
+END )/(SELECT SUM(total_amt) from transactions) )AS Sales_percent,
+100*(sum(CASE
+when total_amt<0 then abs(total_amt)
+end )/(SELECT SUM(total_amt) from transactions))as Returns_percent
+from Transactions 
+left join prod_cat_info on Transactions.prod_cat_code=prod_cat_info.prod_cat_code and Transactions.prod_subcat_code=prod_cat_info.prod_sub_cat_code
+GROUP BY prod_subcat
+order by Sales_percent desc,Returns_percent desc
+
+---Q11-For all customers aged between 25 to 35 years find what is the net totat revenue generated 
+---by these consumers in last 30 days of transactions from max transaction date available in the data?
+select sum(total_amt) as [total revenue generated ]from (select customer_Id,total_amt,DATEDIFF(year,DOB,GETDATE()) as age from Customer A
+inner join Transactions B on A.customer_Id=B.cust_id
+where DATEDIFF(year,DOB,GETDATE()) between 25 and 35 and sign(qty)=1 and DATEDIFF(day,tran_date,
+(select max(tran_date) from Transactions)) <= 30) as tbl1
+
+---Q12-Which product category has seen the max value of returns in the last 3 months of transactions?
+select top 1 prod_cat_code,abs(sum(cast(qty as numeric))) as No_Returns from Transactions
+where sign(cast(qty as numeric))=-1 and DATEDIFF(MONTH,tran_date,(select max(tran_date) from Transactions)) <=3
+group by prod_cat_code
+order by 2 desc
+
+
+---Q13-Which store-type sells the maximum products;by value of sales amount and by quantity sold?
+select top 1 Store_type from Transactions
+where total_amt>0
+group by Store_type
+order by sum(cast(total_amt as numeric)) desc
+
+---Q14-What are the categories for which average revenue is above the overall average ?
+select prod_cat,AVG(total_amt) avg  from Transactions A
+inner join prod_cat_info B on A.prod_cat_code=B.prod_cat_code and A.prod_subcat_code=B.prod_sub_cat_code
+where total_amt>0 
+group by prod_cat
+having AVG(total_amt)>(select AVG(total_amt) from Transactions where total_amt>0)
+
+---Q15-Find the average and total revenue by each subcategory for the categories which are among top 5 categories in terms of quantity sold?
+select prod_cat,prod_subcat,AVG(total_amt) as Avg_Revenue ,sum(total_amt) as Total_Revenue  from Transactions A
+inner join prod_cat_info  B on A.prod_cat_code=B.prod_cat_code and A.prod_subcat_code=B.prod_sub_cat_code
+where total_amt>0 and A.prod_cat_code in (select top 5 prod_cat_code from Transactions where total_amt>0 group by prod_cat_code order by sum(total_amt) desc)
+group by  prod_cat,prod_subcat
+
+
+
+
